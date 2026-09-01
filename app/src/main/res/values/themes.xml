@@ -1,0 +1,13 @@
+<resources>
+    <style name="Theme.BgSounds" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- Used only by SoundPickerActivity: a small floating dialog window that
+         the "Pick Sound" QS tile pops up over whatever the user was looking
+         at, so it feels like a quick menu rather than opening the full app. -->
+    <style name="Theme.BgSounds.Picker" parent="android:Theme.Material.Dialog.NoActionBar">
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>
