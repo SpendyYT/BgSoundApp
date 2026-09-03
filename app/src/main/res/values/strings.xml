@@ -5,5 +5,10 @@
     <string name="no_sound_selected">Select a sound</string>
     <string name="action_play">Play</string>
     <string name="action_pause">Pause</string>
+    <string name="action_stop">Stop</string>
     <string name="pick_a_sound">Pick a sound</string>
+    <string name="notification_timer_subtitle">Sleep timer: %1$s</string>
+    <string name="sleep_timer">Sleep timer</string>
+    <string name="sleep_timer_off">Off</string>
+    <string name="sleep_timer_minutes_format">%d min</string>
 </resources>

@@ -3,12 +3,15 @@ package com.bgsounds.player.playback
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 data class PlaybackUiState(
     val currentSoundId: String? = null,
     val isPlaying: Boolean = false,
     val positionMs: Long = 0L,
-    val durationMs: Long = 0L
+    val durationMs: Long = 0L,
+    /** Null when no sleep timer is running. */
+    val sleepTimerRemainingMs: Long? = null
 )
 
 /**
@@ -21,7 +24,22 @@ object PlaybackStateHolder {
     private val _state = MutableStateFlow(PlaybackUiState())
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
 
-    fun update(soundId: String?, isPlaying: Boolean, positionMs: Long = 0L, durationMs: Long = 0L) {
-        _state.value = PlaybackUiState(soundId, isPlaying, positionMs, durationMs)
+    fun updatePlayback(soundId: String?, isPlaying: Boolean, positionMs: Long = 0L, durationMs: Long = 0L) {
+        _state.update { current ->
+            current.copy(
+                currentSoundId = soundId,
+                isPlaying = isPlaying,
+                positionMs = positionMs,
+                durationMs = durationMs
+            )
+        }
+    }
+
+    fun updateSleepTimer(remainingMs: Long?) {
+        _state.update { it.copy(sleepTimerRemainingMs = remainingMs) }
+    }
+
+    fun reset() {
+        _state.value = PlaybackUiState()
     }
 }

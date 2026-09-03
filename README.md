@@ -41,6 +41,27 @@ campfire, ...), built per the attached spec.
    the dialog closes itself immediately. The original tile keeps its simple
    job: tap toggles play/pause of the last selected sound. Add either or both
    tiles to your Quick Settings.
+6. **Sleep timer.** Tap the clock icon in the bottom bar to pick 15/30/45/60/90
+   minutes; it shows a live mm:ss countdown (also reflected in the
+   notification's subtitle), and firing it does a *full* stop, not just
+   pause - matches "let it fall asleep on its own." Tap the countdown again to
+   change it or turn it off.
+7. **Background footprint fixed.** Previously the service stayed pinned as an
+   "active foreground service" (and its notification stayed "ongoing")
+   indefinitely once started, even after you paused - which is what looked
+   like "the app is still running" in the shade. Now:
+   - Pausing demotes the service out of the foreground state right away
+     (`stopForeground(STOP_FOREGROUND_DETACH)`); the notification stays but is
+     dismissible.
+   - If it then sits paused for 10 minutes with nothing happening, the
+     service fully stops itself and the notification disappears.
+   - Swiping the app away from Recents while nothing is playing stops the
+     service immediately too (`onTaskRemoved`).
+   - The notification now also has an explicit **Stop** action (not just
+     Pause), which fully releases the player instead of just pausing.
+8. **Status bar color.** It now follows the app's theme background
+   (`MaterialTheme.colorScheme.background`) instead of the OS default, with
+   light/dark status-bar icons switched automatically to stay legible.
 
 ## What's inside
 

@@ -1,6 +1,7 @@
 package com.bgsounds.player
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -32,26 +33,39 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.TimerOff
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bgsounds.player.data.SettingsRepository
 import com.bgsounds.player.data.SoundCatalog
@@ -60,6 +74,9 @@ import com.bgsounds.player.playback.PlaybackService
 import com.bgsounds.player.playback.PlaybackStateHolder
 import com.bgsounds.player.ui.loadSampledBitmapFromAsset
 import com.bgsounds.player.ui.theme.BgSoundsTheme
+import java.util.Locale
+
+private val SLEEP_TIMER_OPTIONS_MINUTES = listOf(15, 30, 45, 60, 90)
 
 class MainActivity : ComponentActivity() {
 
@@ -75,12 +92,26 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             BgSoundsTheme {
+                val view = LocalView.current
+                val colorScheme = MaterialTheme.colorScheme
+                if (!view.isInEditMode) {
+                    SideEffect {
+                        val window = (view.context as Activity).window
+                        WindowCompat.setDecorFitsSystemWindows(window, true)
+                        window.statusBarColor = colorScheme.background.toArgb()
+                        WindowInsetsControllerCompat(window, view).isAppearanceLightStatusBars =
+                            colorScheme.background.luminance() > 0.5f
+                    }
+                }
+
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     BgSoundsScreen(
                         sounds = sounds,
                         settingsRepository = settingsRepository,
                         onSelectSound = { sound -> playSound(sound.id) },
-                        onTogglePlayPause = { togglePlayPause() }
+                        onTogglePlayPause = { togglePlayPause() },
+                        onSetSleepTimer = { minutes -> setSleepTimer(minutes) },
+                        onCancelSleepTimer = { cancelSleepTimer() }
                     )
                 }
             }
@@ -113,6 +144,21 @@ class MainActivity : ComponentActivity() {
         }
         ContextCompat.startForegroundService(this, intent)
     }
+
+    private fun setSleepTimer(minutes: Int) {
+        val intent = Intent(this, PlaybackService::class.java).apply {
+            action = PlaybackService.ACTION_SET_SLEEP_TIMER
+            putExtra(PlaybackService.EXTRA_SLEEP_TIMER_MINUTES, minutes)
+        }
+        ContextCompat.startForegroundService(this, intent)
+    }
+
+    private fun cancelSleepTimer() {
+        val intent = Intent(this, PlaybackService::class.java).apply {
+            action = PlaybackService.ACTION_CANCEL_SLEEP_TIMER
+        }
+        ContextCompat.startForegroundService(this, intent)
+    }
 }
 
 @Composable
@@ -120,7 +166,9 @@ private fun BgSoundsScreen(
     sounds: List<Sound>,
     settingsRepository: SettingsRepository,
     onSelectSound: (Sound) -> Unit,
-    onTogglePlayPause: () -> Unit
+    onTogglePlayPause: () -> Unit,
+    onSetSleepTimer: (Int) -> Unit,
+    onCancelSleepTimer: () -> Unit
 ) {
     val playbackState by PlaybackStateHolder.state.collectAsStateWithLifecycle()
     val lastSoundId by settingsRepository.lastSoundId.collectAsStateWithLifecycle(initialValue = null)
@@ -159,8 +207,11 @@ private fun BgSoundsScreen(
             title = selectedSound?.title,
             isPlaying = playbackState.isPlaying,
             progress = progress,
+            sleepTimerRemainingMs = playbackState.sleepTimerRemainingMs,
             enabled = selectedSound != null,
-            onTogglePlayPause = onTogglePlayPause
+            onTogglePlayPause = onTogglePlayPause,
+            onSetSleepTimer = onSetSleepTimer,
+            onCancelSleepTimer = onCancelSleepTimer
         )
     }
 }
@@ -221,21 +272,32 @@ private fun BottomBar(
     title: String?,
     isPlaying: Boolean,
     progress: Float,
+    sleepTimerRemainingMs: Long?,
     enabled: Boolean,
-    onTogglePlayPause: () -> Unit
+    onTogglePlayPause: () -> Unit,
+    onSetSleepTimer: (Int) -> Unit,
+    onCancelSleepTimer: () -> Unit
 ) {
     Surface(tonalElevation = 4.dp, shadowElevation = 8.dp) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                SleepTimerControl(
+                    remainingMs = sleepTimerRemainingMs,
+                    onSelect = onSetSleepTimer,
+                    onCancel = onCancelSleepTimer
+                )
+
                 Text(
                     text = title ?: stringResource(id = R.string.no_sound_selected),
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 8.dp)
                 )
                 FilledIconButton(
                     onClick = onTogglePlayPause,
@@ -262,9 +324,81 @@ private fun BottomBar(
                 progress = { animatedProgress },
                 modifier = Modifier
                     .fillMaxWidth()
+                    .padding(horizontal = 8.dp)
                     .height(4.dp)
                     .clip(RoundedCornerShape(2.dp))
             )
         }
     }
+}
+
+@Composable
+private fun SleepTimerControl(
+    remainingMs: Long?,
+    onSelect: (Int) -> Unit,
+    onCancel: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        if (remainingMs != null) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { expanded = true }
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Timer,
+                    contentDescription = stringResource(id = R.string.sleep_timer),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = formatCountdown(remainingMs),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        } else {
+            IconButton(onClick = { expanded = true }) {
+                Icon(imageVector = Icons.Filled.Timer, contentDescription = stringResource(id = R.string.sleep_timer))
+            }
+        }
+
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            SLEEP_TIMER_OPTIONS_MINUTES.forEach { minutes ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(id = R.string.sleep_timer_minutes_format, minutes)) },
+                    onClick = {
+                        onSelect(minutes)
+                        expanded = false
+                    }
+                )
+            }
+            if (remainingMs != null) {
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(imageVector = Icons.Filled.TimerOff, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(stringResource(id = R.string.sleep_timer_off))
+                        }
+                    },
+                    onClick = {
+                        onCancel()
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+private fun formatCountdown(ms: Long): String {
+    val totalSeconds = (ms / 1000).coerceAtLeast(0)
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return String.format(Locale.getDefault(), "%d:%02d", minutes, seconds)
 }
